@@ -29,7 +29,9 @@ public abstract class Parameter {
 
   public abstract boolean visualization();
 
-  public abstract double blackWhiteContrastLevel();
+  public abstract int filterBlockSize();
+
+  public abstract double subtractedConstant();
 
   public abstract boolean invertBlackWhiteColor();
 
@@ -45,7 +47,8 @@ public abstract class Parameter {
         .fusedPoseTopicName(parameterTree.getString("/fused_pose_topic_name"))
         .markerPoseTopicName(parameterTree.getString("/marker_pose_topic_name"))
         .visualization(parameterTree.getBoolean("/visualization"))
-        .blackWhiteContrastLevel(parameterTree.getDouble("/black_white_contrast_level"))
+        .filterBlockSize(parameterTree.getInteger("/filter_block_size"))
+        .subtractedConstant(parameterTree.getDouble("/subtracted_constant"))
         .invertBlackWhiteColor(parameterTree.getBoolean("/invert_black_white_color"))
         .build();
   }
@@ -76,7 +79,9 @@ public abstract class Parameter {
 
     public abstract Builder visualization(boolean value);
 
-    public abstract Builder blackWhiteContrastLevel(double value);
+    public abstract Builder filterBlockSize(int value);
+
+    public abstract Builder subtractedConstant(double value);
 
     public abstract Builder invertBlackWhiteColor(boolean value);
 
