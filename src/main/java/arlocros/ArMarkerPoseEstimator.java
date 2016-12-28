@@ -157,9 +157,6 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
 							Utils.tresholdContrastBlackWhite(image, parameter.blackWhiteContrastLevel(),
 									parameter.invertBlackWhiteColor());
 						}
-						if (parameter.useThreshold()) {
-							Imgproc.threshold(image, image, 200, 255, Imgproc.THRESH_BINARY);
-						}
 						// Mat cannyimg = new Mat(image.height(), image.width(),
 						// CvType.CV_8UC3);
 						// Imgproc.Canny(image, cannyimg, 10, 100);
