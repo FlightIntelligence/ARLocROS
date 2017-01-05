@@ -50,10 +50,11 @@ public class Utils {
 //				image2.put(j, i, rgbnew);
 //			}
 
-    final Mat transformMat = new Mat(1, 3, CvType.CV_64FC1);
+    final Mat transformMat = new Mat(1, 3, CvType.CV_32F);
     final int row = 0;
     final int col = 0;
     transformMat.put(row, col, 0.33, 0.33, 0.34);
+    image2.convertTo(image2, CvType.CV_32F);
     Core.transform(image2, image2, transformMat);
     Imgproc.adaptiveThreshold(image2, image2, 255, Imgproc.ADAPTIVE_THRESH_MEAN_C, Imgproc.THRESH_BINARY, filterBlockSize, subtractedConstant);
     if (invertBlackWhiteColor) {
