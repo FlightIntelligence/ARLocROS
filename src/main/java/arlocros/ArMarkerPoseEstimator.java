@@ -65,7 +65,6 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
 	private static final Logger logger = LoggerFactory.getLogger(ArMarkerPoseEstimator.class);
 
 	private CameraParams camp;
-	private Mat image;
 	private Mat rvec;
 	private MatOfDouble tvec;
 
@@ -150,10 +149,11 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
 				if (camp != null) {
 					try {
 						//
-						image = Utils.matFromImage(message);
+						final Mat image = Utils.matFromImage(message);
 						// uncomment to add more contrast to the image
-						Utils.tresholdContrastBlackWhite(image, parameter.filterBlockSize(), parameter.subtractedConstant(),
+						final Mat thresholdedImage = Utils.tresholdContrastBlackWhite(image, parameter.filterBlockSize(), parameter.subtractedConstant(),
 									parameter.invertBlackWhiteColor());
+						image.release();
 						// Mat cannyimg = new Mat(image.height(), image.width(),
 						// CvType.CV_8UC3);
 						// Imgproc.Canny(image, cannyimg, 10, 100);
@@ -162,12 +162,14 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
 						// image.convertTo(image, -1, 1.5, 0);
 						// setup camera matrix and return vectors
 						// compute pose
-						if (poseProcessor.computePose(rvec, tvec, image)) {
+						if (poseProcessor.computePose(rvec, tvec, thresholdedImage)) {
 							// notify publisher threads (pose and tf, see below)
 							synchronized (tvec) {
 								tvec.notifyAll();
 							}
 						}
+
+						thresholdedImage.release();
 
 					} catch (Exception e) {
 						logger.info("An exception occurs.", e);

@@ -35,31 +35,36 @@ public class Utils {
     return cvImage;
   }
 
-  static public void tresholdContrastBlackWhite(Mat image2, int filterBlockSize, double subtractedConstant,
+  static public Mat tresholdContrastBlackWhite(Mat srcImage, int filterBlockSize, double subtractedConstant,
       boolean invertBlackWhiteColor) {
-//		int width = image2.width();
-//		int height = image2.height();
-//		for (int i = 0; i < width; i++)
-//			for (int j = 0; j < height; j++) {
-//				double[] rgb = image2.get(j, i);
-//				double[] rgbnew = new double[rgb.length];
-//				if (rgb[0] + rgb[1] + rgb[2] < d)
-//					rgbnew[0] = rgbnew[1] = rgbnew[2] = 0.0;
-//				else
-//					rgbnew[0] = rgbnew[1] = rgbnew[2] = 255.0;
-//				image2.put(j, i, rgbnew);
-//			}
 
     final Mat transformMat = new Mat(1, 3, CvType.CV_32F);
     final int row = 0;
     final int col = 0;
     transformMat.put(row, col, 0.33, 0.33, 0.34);
-    image2.convertTo(image2, CvType.CV_32F);
-    Core.transform(image2, image2, transformMat);
-    Imgproc.adaptiveThreshold(image2, image2, 255, Imgproc.ADAPTIVE_THRESH_MEAN_C, Imgproc.THRESH_BINARY, filterBlockSize, subtractedConstant);
+
+    final Mat floatValueImage = new Mat(srcImage.height(), srcImage.width(), CvType.CV_32F);
+    srcImage.convertTo(floatValueImage, CvType.CV_32F);
+    srcImage.release();
+
+    final Mat grayImage = new Mat(floatValueImage.height(), floatValueImage.width(), CvType.CV_8UC1);
+    Core.transform(floatValueImage, grayImage, transformMat);
+    floatValueImage.release();
+
+    Mat thresholdedImage = new Mat(grayImage.height(), grayImage.width(), CvType.CV_8UC1);
+    Imgproc.adaptiveThreshold(grayImage, thresholdedImage, 255, Imgproc.ADAPTIVE_THRESH_MEAN_C, Imgproc.THRESH_BINARY, filterBlockSize, subtractedConstant);
+    grayImage.release();
+
     if (invertBlackWhiteColor) {
-      Core.bitwise_not(image2, image2);
+      final Mat invertedImage = new Mat(thresholdedImage.height(), thresholdedImage.width(), CvType.CV_8UC1);
+      Core.bitwise_not(thresholdedImage, invertedImage);
+      thresholdedImage.release();
+      thresholdedImage = invertedImage;
     }
-    Imgproc.cvtColor(image2, image2, Imgproc.COLOR_GRAY2RGB);
+
+    final Mat coloredImage = new Mat(thresholdedImage.height(), thresholdedImage.width(), CvType.CV_8UC3);
+    Imgproc.cvtColor(thresholdedImage, coloredImage, Imgproc.COLOR_GRAY2RGB);
+    thresholdedImage.release();
+    return coloredImage;
   }
 }
