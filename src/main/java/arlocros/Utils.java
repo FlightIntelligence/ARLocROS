@@ -47,9 +47,13 @@ public class Utils {
     srcImage.convertTo(floatValueImage, CvType.CV_32F);
     srcImage.release();
 
-    final Mat grayImage = new Mat(floatValueImage.height(), floatValueImage.width(), CvType.CV_8UC1);
-    Core.transform(floatValueImage, grayImage, transformMat);
+    final Mat grayFloatImage = new Mat(floatValueImage.height(), floatValueImage.width(), CvType.CV_32F);
+    Core.transform(floatValueImage, grayFloatImage, transformMat);
     floatValueImage.release();
+
+    final Mat grayImage = new Mat(grayFloatImage.height(), grayFloatImage.width(), CvType.CV_8UC1);
+    grayFloatImage.convertTo(grayImage, CvType.CV_8UC1);
+    grayFloatImage.release();
 
     Mat thresholdedImage = new Mat(grayImage.height(), grayImage.width(), CvType.CV_8UC1);
     Imgproc.adaptiveThreshold(grayImage, thresholdedImage, 255, Imgproc.ADAPTIVE_THRESH_MEAN_C, Imgproc.THRESH_BINARY, filterBlockSize, subtractedConstant);
