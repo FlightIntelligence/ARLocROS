@@ -156,18 +156,22 @@ public final class ComputePose {
 				p = new Point(vertex2d[3].x, vertex2d[3].y);
 				points2dlist.add(p);
 
-				final MatOfPoint mop = new MatOfPoint();
-				mop.fromList(points2dlist);
-				final List<MatOfPoint> pts = new ArrayList<>();
-				pts.add(mop);
+//				final MatOfPoint mop = new MatOfPoint();
+//				mop.fromList(points2dlist);
+//				final List<MatOfPoint> pts = new ArrayList<>();
+//				pts.add(mop);
+
 				// read and add corresponding 3D points
 				points3dlist.addAll(markerConfig.create3dpointlist(patternmap.get(id)));
-				// draw red rectangle around detected marker
-				Core.rectangle(image2, new Point(vertex2d[0].x, vertex2d[0].y), new Point(vertex2d[2].x, vertex2d[2].y),
-						new Scalar(0, 0, 255));
-				final String markerFile = patternmap.get(id).replaceAll(".*4x4_", "").replace(".patt", "");
-				Core.putText(image2, markerFile, new Point((vertex2d[2].x+vertex2d[0].x)/2.0, vertex2d[0].y - 5),
-						4, 1, new Scalar(250, 0, 0));
+
+				if (visualization) {
+					// draw red rectangle around detected marker
+					Core.rectangle(image2, new Point(vertex2d[0].x, vertex2d[0].y),
+							new Point(vertex2d[2].x, vertex2d[2].y), new Scalar(0, 0, 255));
+					final String markerFile = patternmap.get(id).replaceAll(".*4x4_", "").replace(".patt", "");
+					Core.putText(image2, markerFile, new Point((vertex2d[2].x + vertex2d[0].x) / 2.0, vertex2d[0].y - 5),
+							4, 1, new Scalar(250, 0, 0));
+				}
 			}
 
 		}
@@ -184,6 +188,8 @@ public final class ComputePose {
 
 		// do not call solvePNP with empty intput data (no markers detected)
 		if (points2dlist.size() == 0) {
+			objectPoints.release();
+			imagePoints.release();
 			return false;
 		}
 
@@ -194,11 +200,17 @@ public final class ComputePose {
 		Calib3d.solvePnPRansac(objectPoints, imagePoints, cameraMatrix, distCoeffs, rvec, tvec, false, 300, 5, 16,
 				inliers, Calib3d.CV_P3P);
 		ArMarkerPoseEstimator.getLog().info("Points detected: " + points2dlist.size() + " inliers: " + inliers.size());
+
+		objectPoints.release();
+		image2.release();
+
 		// avoid publish zero pose if localization failed
 		if (inliers.rows() == 0) {
+			inliers.release();
 			return false;
 		}
 
+		inliers.release();
 		return true;
 	}
 }
