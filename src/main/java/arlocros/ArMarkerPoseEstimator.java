@@ -175,9 +175,6 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
 
                 thresholdedImage.release();
 
-                publishCamFrameToMarkerFrame(rvec, tvec, tfPublisherCamToMarker, connectedNode);
-                publishMapToOdom(rvec, tvec, transformationService, tfPublisherMapToOdom, connectedNode);
-
                 // publish pose
                 final QuaternionHelper q = new QuaternionHelper();
 
@@ -194,8 +191,6 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
                 Core.multiply(R, new Scalar(-1), R);
                 Core.gemm(R, tvec, 1, new Mat(), 0, tvec_map_cam, 0);
                 R.release();
-                rvec.release();
-                tvec.release();
                 final org.ros.rosjava_geometry.Quaternion rotation =
                     new org.ros.rosjava_geometry.Quaternion(q.getX(), q.getY(), q.getZ(), q.getW());
                 final double x = tvec_map_cam.get(0, 0)[0];
@@ -324,6 +319,9 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
                 posestamped.getHeader().setStamp(connectedNode.getCurrentTime());
                 posePublisher.publish(posestamped);
                 mostRecentPose.set(posestamped);
+
+                publishCamFrameToMarkerFrame(rvec, tvec, tfPublisherCamToMarker, connectedNode);
+                publishMapToOdom(rvec, tvec, transformationService, tfPublisherMapToOdom, connectedNode);
 
               } catch (Exception e) {
                 logger.info("An exception occurs.", e);
