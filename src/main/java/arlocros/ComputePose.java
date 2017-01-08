@@ -190,7 +190,6 @@ public final class ComputePose {
 		if (points2dlist.size() == 0) {
 			objectPoints.release();
 			imagePoints.release();
-			image2.release();
 			return false;
 		}
 
@@ -204,7 +203,6 @@ public final class ComputePose {
 
 		objectPoints.release();
 		imagePoints.release();
-		image2.release();
 
 		// avoid publish zero pose if localization failed
 		if (inliers.rows() == 0) {
