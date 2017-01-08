@@ -255,7 +255,7 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
                   boolean goodpose = false;
                   // if (current_pose != null && current_timestamp != null) {
                   if ((last_pose != null && last_timestamp != null)
-                      || Double.isNaN(last_pose.getTranslation().getX())) {
+                      && !Double.isNaN(last_pose.getTranslation().getX())) {
                     // check speed of movement between last and current pose
                     double distance = PoseCompare.distance(current_pose, last_pose);
                     double timedelta = PoseCompare.timedelta(current_timestamp, last_timestamp);
