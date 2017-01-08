@@ -178,211 +178,211 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
 			}
 		});
 
-		// publish tf CAMERA_FRAME_NAME --> MARKER_FRAME_NAME
-		final Publisher<tf2_msgs.TFMessage> tfPublisherCamToMarker = connectedNode.newPublisher("tf",
-				tf2_msgs.TFMessage._TYPE);
-		connectedNode.executeCancellableLoop(new CancellableLoop() {
+//		// publish tf CAMERA_FRAME_NAME --> MARKER_FRAME_NAME
+//		final Publisher<tf2_msgs.TFMessage> tfPublisherCamToMarker = connectedNode.newPublisher("tf",
+//				tf2_msgs.TFMessage._TYPE);
+//		connectedNode.executeCancellableLoop(new CancellableLoop() {
+//
+//			@Override
+//			protected void loop() throws InterruptedException {
+//
+//				synchronized (tvec) {
+//					tvec.wait();
+//				}
+//
+//				QuaternionHelper q = new QuaternionHelper();
+//
+//				/*
+//				 * http://euclideanspace.com/maths/geometry/rotations/
+//				 * conversions/matrixToEuler/index.htm
+//				 * http://stackoverflow.com/questions/12933284/rodrigues-into-
+//				 * eulerangles-and-vice-versa
+//				 *
+//				 * heading = atan2(-m20,m00) attitude = asin(m10) bank =
+//				 * atan2(-m12,m11)
+//				 */
+//				// convert output rotation vector rvec to rotation matrix R
+//				Mat R = new Mat(3, 3, CvType.CV_32FC1);
+//				Calib3d.Rodrigues(rvec, R);
+//				// get rotations around X,Y,Z from rotation matrix R
+//				double bankX = Math.atan2(-R.get(1, 2)[0], R.get(1, 1)[0]);
+//				double headingY = Math.atan2(-R.get(2, 0)[0], R.get(0, 0)[0]);
+//				double attitudeZ = Math.asin(R.get(1, 0)[0]);
+//				// convert Euler angles to quarternion
+//				q.setFromEuler(bankX, headingY, attitudeZ);
+//
+//				// set information to message
+//				TFMessage tfmessage = tfPublisherCamToMarker.newMessage();
+//				TransformStamped posestamped = connectedNode.getTopicMessageFactory()
+//						.newFromType(geometry_msgs.TransformStamped._TYPE);
+//				Transform transform = posestamped.getTransform();
+//
+//				Quaternion orientation = transform.getRotation();
+//				Vector3 point = transform.getTranslation();
+//				point.setX(tvec.get(0, 0)[0]);
+//				point.setY(tvec.get(1, 0)[0]);
+//				point.setZ(tvec.get(2, 0)[0]);
+//
+//				orientation.setW(q.getW());
+//				orientation.setX(q.getX());
+//				orientation.setY(q.getY());
+//				orientation.setZ(q.getZ());
+//				posestamped.getHeader().setFrameId(parameter.cameraFrameName());
+//				posestamped.setChildFrameId(parameter.markerFrameName());
+//				posestamped.getHeader().setStamp(connectedNode.getCurrentTime());
+//				// frame_id too
+//				tfmessage.getTransforms().add(posestamped);
+//				tfPublisherCamToMarker.publish(tfmessage);
+//			}
+//		});
 
-			@Override
-			protected void loop() throws InterruptedException {
-
-				synchronized (tvec) {
-					tvec.wait();
-				}
-
-				QuaternionHelper q = new QuaternionHelper();
-
-				/*
-				 * http://euclideanspace.com/maths/geometry/rotations/
-				 * conversions/matrixToEuler/index.htm
-				 * http://stackoverflow.com/questions/12933284/rodrigues-into-
-				 * eulerangles-and-vice-versa
-				 *
-				 * heading = atan2(-m20,m00) attitude = asin(m10) bank =
-				 * atan2(-m12,m11)
-				 */
-				// convert output rotation vector rvec to rotation matrix R
-				Mat R = new Mat(3, 3, CvType.CV_32FC1);
-				Calib3d.Rodrigues(rvec, R);
-				// get rotations around X,Y,Z from rotation matrix R
-				double bankX = Math.atan2(-R.get(1, 2)[0], R.get(1, 1)[0]);
-				double headingY = Math.atan2(-R.get(2, 0)[0], R.get(0, 0)[0]);
-				double attitudeZ = Math.asin(R.get(1, 0)[0]);
-				// convert Euler angles to quarternion
-				q.setFromEuler(bankX, headingY, attitudeZ);
-
-				// set information to message
-				TFMessage tfmessage = tfPublisherCamToMarker.newMessage();
-				TransformStamped posestamped = connectedNode.getTopicMessageFactory()
-						.newFromType(geometry_msgs.TransformStamped._TYPE);
-				Transform transform = posestamped.getTransform();
-
-				Quaternion orientation = transform.getRotation();
-				Vector3 point = transform.getTranslation();
-				point.setX(tvec.get(0, 0)[0]);
-				point.setY(tvec.get(1, 0)[0]);
-				point.setZ(tvec.get(2, 0)[0]);
-
-				orientation.setW(q.getW());
-				orientation.setX(q.getX());
-				orientation.setY(q.getY());
-				orientation.setZ(q.getZ());
-				posestamped.getHeader().setFrameId(parameter.cameraFrameName());
-				posestamped.setChildFrameId(parameter.markerFrameName());
-				posestamped.getHeader().setStamp(connectedNode.getCurrentTime());
-				// frame_id too
-				tfmessage.getTransforms().add(posestamped);
-				tfPublisherCamToMarker.publish(tfmessage);
-			}
-		});
-
-		// publish Markers
-		final Publisher<visualization_msgs.Marker> markerPublisher = connectedNode.newPublisher("markers",
-				visualization_msgs.Marker._TYPE);
-		connectedNode.executeCancellableLoop(new CancellableLoop() {
-
-			@Override
-			protected void loop() throws InterruptedException {
-				// publish markers every 500ms
-				Thread.sleep(500);
-				// get marker points from markerConfig, each marker has 4
-				// vertices
-				List<Point3> points3dlist = markerConfig.getUnordered3DPointList();
-				int i = 0;
-				for (Point3 p : points3dlist) {
-					Marker markermessage = markerPublisher.newMessage();
-					// FIXME If the markers are published into an existing frame
-					// (e.g. map or odom) the node will consume very high CPU
-					// and will fail after a short time. The markers are
-					// probably published in the wrong way.
-					markermessage.getHeader().setFrameId(parameter.markerFrameName());
-					markermessage.setId(i);
-					i++;
-					markermessage.setType(visualization_msgs.Marker.SPHERE);
-					markermessage.setAction(visualization_msgs.Marker.ADD);
-					// position
-					double x = p.x;
-					markermessage.getPose().getPosition().setX(x);
-					double y = p.y;
-					markermessage.getPose().getPosition().setY(y);
-					double z = p.z;
-					markermessage.getPose().getPosition().setZ(z);
-					// orientation
-					markermessage.getPose().getOrientation().setX(0);
-					markermessage.getPose().getOrientation().setY(0);
-					markermessage.getPose().getOrientation().setZ(0);
-					markermessage.getPose().getOrientation().setW(1);
-					// patterntSize
-					markermessage.getScale().setX(0.1);
-					markermessage.getScale().setY(0.1);
-					markermessage.getScale().setZ(0.1);
-					// color
-					markermessage.getColor().setA(1);
-					markermessage.getColor().setR(1);
-					markermessage.getColor().setG(0);
-					markermessage.getColor().setB(0);
-
-					markerPublisher.publish(markermessage);
-				}
-			}
-		});
+//		// publish Markers
+//		final Publisher<visualization_msgs.Marker> markerPublisher = connectedNode.newPublisher("markers",
+//				visualization_msgs.Marker._TYPE);
+//		connectedNode.executeCancellableLoop(new CancellableLoop() {
+//
+//			@Override
+//			protected void loop() throws InterruptedException {
+//				// publish markers every 500ms
+//				Thread.sleep(500);
+//				// get marker points from markerConfig, each marker has 4
+//				// vertices
+//				List<Point3> points3dlist = markerConfig.getUnordered3DPointList();
+//				int i = 0;
+//				for (Point3 p : points3dlist) {
+//					Marker markermessage = markerPublisher.newMessage();
+//					// FIXME If the markers are published into an existing frame
+//					// (e.g. map or odom) the node will consume very high CPU
+//					// and will fail after a short time. The markers are
+//					// probably published in the wrong way.
+//					markermessage.getHeader().setFrameId(parameter.markerFrameName());
+//					markermessage.setId(i);
+//					i++;
+//					markermessage.setType(visualization_msgs.Marker.SPHERE);
+//					markermessage.setAction(visualization_msgs.Marker.ADD);
+//					// position
+//					double x = p.x;
+//					markermessage.getPose().getPosition().setX(x);
+//					double y = p.y;
+//					markermessage.getPose().getPosition().setY(y);
+//					double z = p.z;
+//					markermessage.getPose().getPosition().setZ(z);
+//					// orientation
+//					markermessage.getPose().getOrientation().setX(0);
+//					markermessage.getPose().getOrientation().setY(0);
+//					markermessage.getPose().getOrientation().setZ(0);
+//					markermessage.getPose().getOrientation().setW(1);
+//					// patterntSize
+//					markermessage.getScale().setX(0.1);
+//					markermessage.getScale().setY(0.1);
+//					markermessage.getScale().setZ(0.1);
+//					// color
+//					markermessage.getColor().setA(1);
+//					markermessage.getColor().setR(1);
+//					markermessage.getColor().setG(0);
+//					markermessage.getColor().setB(0);
+//
+//					markerPublisher.publish(markermessage);
+//				}
+//			}
+//		});
 
 		// publish tf map --> odom
-		final Publisher<tf2_msgs.TFMessage> tfPublisherMapToOdom = connectedNode.newPublisher("tf",
-				tf2_msgs.TFMessage._TYPE);
-		connectedNode.executeCancellableLoop(new CancellableLoop() {
-
-			@Override
-			protected void loop() throws InterruptedException {
-
-				// since this is an infinite loop, wait to be notified if new
-				// image was processed
-				synchronized (tvec) {
-					tvec.wait();
-				}
-
-				// compute transform map to odom from map to
-				// camera_rgb_optical_frame and odom to camera_rgb_optical_frame
-
-				// map to camera_rgb_optical_frame
-				Mat tvec_map_cam = new MatOfDouble(1.0, 1.0, 1.0);
-				QuaternionHelper q = new QuaternionHelper();
-				// get rotation matrix R from solvepnp output rotation vector
-				// rvec
-				Mat R = new Mat(3, 3, CvType.CV_32FC1);
-				Calib3d.Rodrigues(rvec, R);
-				// transpose R, because we need the transformation from
-				// world(map) to camera
-				R = R.t();
-				// get rotation around X,Y,Z from R in radiants
-				double bankX = Math.atan2(-R.get(1, 2)[0], R.get(1, 1)[0]);
-				double headingY = Math.atan2(-R.get(2, 0)[0], R.get(0, 0)[0]);
-				double attitudeZ = Math.asin(R.get(1, 0)[0]);
-				q.setFromEuler(bankX, headingY, attitudeZ);
-				// compute translation vector from world (map) to cam
-				// tvec_map_cam
-				Core.multiply(R, new Scalar(-1), R); // R=-R
-				Core.gemm(R, tvec, 1, new Mat(), 0, tvec_map_cam, 0); // tvec_map_cam=R*tvec
-
-				org.ros.rosjava_geometry.Quaternion rotation = new org.ros.rosjava_geometry.Quaternion(q.getX(),
-						q.getY(), q.getZ(), q.getW());
-				double x = tvec_map_cam.get(0, 0)[0];
-				double y = tvec_map_cam.get(1, 0)[0];
-				double z = tvec_map_cam.get(2, 0)[0];
-				// create a Transform Object that hold the transform map to cam
-				org.ros.rosjava_geometry.Vector3 translation = new org.ros.rosjava_geometry.Vector3(x, y, z);
-				org.ros.rosjava_geometry.Transform transform_map_cam = new org.ros.rosjava_geometry.Transform(
-						translation, rotation);
-
-				// odom to camera_rgb_optical_frame
-				GraphName sourceFrame = GraphName.of(parameter.cameraFrameName());
-				GraphName targetFrame = GraphName.of("odom");
-				org.ros.rosjava_geometry.Transform transform_cam_odom = null;
-				if (transformationService.canTransform(targetFrame, sourceFrame)) {
-					try {
-						transform_cam_odom = transformationService.lookupTransform(targetFrame, sourceFrame);
-					} catch (Exception e) {
-						log.error(ExceptionUtils.getStackTrace(e));
-						log.info("Cloud not get transformation from " + parameter.cameraFrameName() + " to " + "odom! "
-								+ "However, " + "will continue..");
-						return;
-					}
-				} else {
-					log.info("Cloud not get transformation from " + parameter.cameraFrameName() + " to " + "odom! "
-							+ "However, will " + "continue..");
-					// cancel this loop..no result can be computed
-					return;
-				}
-				// multiply results
-				org.ros.rosjava_geometry.Transform result = org.ros.rosjava_geometry.Transform.identity();
-				result = result.multiply(transform_map_cam);
-				result = result.multiply(transform_cam_odom);
-
-				// set information to ROS message
-				TFMessage tfMessage = tfPublisherMapToOdom.newMessage();
-				TransformStamped transformStamped = connectedNode.getTopicMessageFactory()
-						.newFromType(geometry_msgs.TransformStamped._TYPE);
-				Transform transform = transformStamped.getTransform();
-
-				Quaternion orientation = transform.getRotation();
-				Vector3 vector = transform.getTranslation();
-				vector.setX(result.getTranslation().getX());
-				vector.setY(result.getTranslation().getY());
-				vector.setZ(result.getTranslation().getZ());
-
-				orientation.setW(result.getRotationAndScale().getW());
-				orientation.setX(result.getRotationAndScale().getX());
-				orientation.setY(result.getRotationAndScale().getY());
-				orientation.setZ(result.getRotationAndScale().getZ());
-				transformStamped.getHeader().setFrameId("map");
-				transformStamped.setChildFrameId("odom");
-				transformStamped.getHeader().setStamp(connectedNode.getCurrentTime());
-				// frame_id too
-				tfMessage.getTransforms().add(transformStamped);
-				tfPublisherMapToOdom.publish(tfMessage);
-				// System.exit(0);
-			}
-		});
+//		final Publisher<tf2_msgs.TFMessage> tfPublisherMapToOdom = connectedNode.newPublisher("tf",
+//				tf2_msgs.TFMessage._TYPE);
+//		connectedNode.executeCancellableLoop(new CancellableLoop() {
+//
+//			@Override
+//			protected void loop() throws InterruptedException {
+//
+//				// since this is an infinite loop, wait to be notified if new
+//				// image was processed
+//				synchronized (tvec) {
+//					tvec.wait();
+//				}
+//
+//				// compute transform map to odom from map to
+//				// camera_rgb_optical_frame and odom to camera_rgb_optical_frame
+//
+//				// map to camera_rgb_optical_frame
+//				Mat tvec_map_cam = new MatOfDouble(1.0, 1.0, 1.0);
+//				QuaternionHelper q = new QuaternionHelper();
+//				// get rotation matrix R from solvepnp output rotation vector
+//				// rvec
+//				Mat R = new Mat(3, 3, CvType.CV_32FC1);
+//				Calib3d.Rodrigues(rvec, R);
+//				// transpose R, because we need the transformation from
+//				// world(map) to camera
+//				R = R.t();
+//				// get rotation around X,Y,Z from R in radiants
+//				double bankX = Math.atan2(-R.get(1, 2)[0], R.get(1, 1)[0]);
+//				double headingY = Math.atan2(-R.get(2, 0)[0], R.get(0, 0)[0]);
+//				double attitudeZ = Math.asin(R.get(1, 0)[0]);
+//				q.setFromEuler(bankX, headingY, attitudeZ);
+//				// compute translation vector from world (map) to cam
+//				// tvec_map_cam
+//				Core.multiply(R, new Scalar(-1), R); // R=-R
+//				Core.gemm(R, tvec, 1, new Mat(), 0, tvec_map_cam, 0); // tvec_map_cam=R*tvec
+//
+//				org.ros.rosjava_geometry.Quaternion rotation = new org.ros.rosjava_geometry.Quaternion(q.getX(),
+//						q.getY(), q.getZ(), q.getW());
+//				double x = tvec_map_cam.get(0, 0)[0];
+//				double y = tvec_map_cam.get(1, 0)[0];
+//				double z = tvec_map_cam.get(2, 0)[0];
+//				// create a Transform Object that hold the transform map to cam
+//				org.ros.rosjava_geometry.Vector3 translation = new org.ros.rosjava_geometry.Vector3(x, y, z);
+//				org.ros.rosjava_geometry.Transform transform_map_cam = new org.ros.rosjava_geometry.Transform(
+//						translation, rotation);
+//
+//				// odom to camera_rgb_optical_frame
+//				GraphName sourceFrame = GraphName.of(parameter.cameraFrameName());
+//				GraphName targetFrame = GraphName.of("odom");
+//				org.ros.rosjava_geometry.Transform transform_cam_odom = null;
+//				if (transformationService.canTransform(targetFrame, sourceFrame)) {
+//					try {
+//						transform_cam_odom = transformationService.lookupTransform(targetFrame, sourceFrame);
+//					} catch (Exception e) {
+//						log.error(ExceptionUtils.getStackTrace(e));
+//						log.info("Cloud not get transformation from " + parameter.cameraFrameName() + " to " + "odom! "
+//								+ "However, " + "will continue..");
+//						return;
+//					}
+//				} else {
+//					log.info("Cloud not get transformation from " + parameter.cameraFrameName() + " to " + "odom! "
+//							+ "However, will " + "continue..");
+//					// cancel this loop..no result can be computed
+//					return;
+//				}
+//				// multiply results
+//				org.ros.rosjava_geometry.Transform result = org.ros.rosjava_geometry.Transform.identity();
+//				result = result.multiply(transform_map_cam);
+//				result = result.multiply(transform_cam_odom);
+//
+//				// set information to ROS message
+//				TFMessage tfMessage = tfPublisherMapToOdom.newMessage();
+//				TransformStamped transformStamped = connectedNode.getTopicMessageFactory()
+//						.newFromType(geometry_msgs.TransformStamped._TYPE);
+//				Transform transform = transformStamped.getTransform();
+//
+//				Quaternion orientation = transform.getRotation();
+//				Vector3 vector = transform.getTranslation();
+//				vector.setX(result.getTranslation().getX());
+//				vector.setY(result.getTranslation().getY());
+//				vector.setZ(result.getTranslation().getZ());
+//
+//				orientation.setW(result.getRotationAndScale().getW());
+//				orientation.setX(result.getRotationAndScale().getX());
+//				orientation.setY(result.getRotationAndScale().getY());
+//				orientation.setZ(result.getRotationAndScale().getZ());
+//				transformStamped.getHeader().setFrameId("map");
+//				transformStamped.setChildFrameId("odom");
+//				transformStamped.getHeader().setStamp(connectedNode.getCurrentTime());
+//				// frame_id too
+//				tfMessage.getTransforms().add(transformStamped);
+//				tfPublisherMapToOdom.publish(tfMessage);
+//				// System.exit(0);
+//			}
+//		});
 
 		// Publish Pose
 
