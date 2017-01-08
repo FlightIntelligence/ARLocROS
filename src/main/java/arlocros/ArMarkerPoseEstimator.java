@@ -171,7 +171,11 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
                 // compute pose
                 final Mat rvec = new Mat(3, 1, CvType.CV_64F);
                 final MatOfDouble tvec = new MatOfDouble(1.0, 1.0, 1.0);
-                poseProcessor.computePose(rvec, tvec, thresholdedImage);
+                final boolean hasPose = poseProcessor.computePose(rvec, tvec, thresholdedImage);
+
+                if (!hasPose) {
+                  return;
+                }
 
                 thresholdedImage.release();
 
@@ -336,6 +340,8 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
                 publishCamFrameToMarkerFrame(rvec, tvec, tfPublisherCamToMarker, connectedNode);
                 publishMapToOdom(
                     rvec, tvec, transformationService, tfPublisherMapToOdom, connectedNode);
+                rvec.release();
+                tvec.release();
 
               } catch (Exception e) {
                 logger.info("An exception occurs.", e);
