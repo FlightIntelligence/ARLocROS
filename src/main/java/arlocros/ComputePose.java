@@ -190,6 +190,7 @@ public final class ComputePose {
 		if (points2dlist.size() == 0) {
 			objectPoints.release();
 			imagePoints.release();
+			image2.release();
 			return false;
 		}
 
@@ -202,6 +203,7 @@ public final class ComputePose {
 		ArMarkerPoseEstimator.getLog().info("Points detected: " + points2dlist.size() + " inliers: " + inliers.size());
 
 		objectPoints.release();
+		imagePoints.release();
 		image2.release();
 
 		// avoid publish zero pose if localization failed
