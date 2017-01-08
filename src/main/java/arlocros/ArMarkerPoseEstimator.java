@@ -337,9 +337,9 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
                 posePublisher.publish(posestamped);
                 mostRecentPose.set(posestamped);
 
-                publishCamFrameToMarkerFrame(rvec, tvec, tfPublisherCamToMarker, connectedNode);
-                publishMapToOdom(
-                    rvec, tvec, transformationService, tfPublisherMapToOdom, connectedNode);
+//                publishCamFrameToMarkerFrame(rvec, tvec, tfPublisherCamToMarker, connectedNode);
+//                publishMapToOdom(
+//                    rvec, tvec, transformationService, tfPublisherMapToOdom, connectedNode);
                 rvec.release();
                 tvec.release();
 
