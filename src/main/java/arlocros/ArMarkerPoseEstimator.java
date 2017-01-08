@@ -21,6 +21,9 @@ import geometry_msgs.Point;
 import geometry_msgs.Pose;
 import geometry_msgs.PoseStamped;
 import geometry_msgs.Quaternion;
+import geometry_msgs.Transform;
+import geometry_msgs.TransformStamped;
+import geometry_msgs.Vector3;
 import jp.nyatla.nyartoolkit.core.NyARException;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.logging.Log;
@@ -40,6 +43,7 @@ import org.ros.node.topic.Subscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sensor_msgs.CameraInfo;
+import tf2_msgs.TFMessage;
 
 import javax.annotation.Nullable;
 import java.io.FileNotFoundException;
@@ -130,6 +134,8 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
       logger.info("Cannot find file when initialize ComputePose", e);
     }
     final ComputePose poseProcessor = computePose;
+    final Publisher<tf2_msgs.TFMessage> tfPublisherCamToMarker = connectedNode.newPublisher("tf",
+              tf2_msgs.TFMessage._TYPE);
     subscriberToImage.addMessageListener(
         new MessageListener<sensor_msgs.Image>() {
 
@@ -166,6 +172,8 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
                 poseProcessor.computePose(rvec, tvec, thresholdedImage);
 
                 thresholdedImage.release();
+
+                publishCamFrameToMarkerFrame(rvec, tvec, tfPublisherCamToMarker, connectedNode);
 
                 // publish pose
                 final QuaternionHelper q = new QuaternionHelper();
@@ -342,6 +350,53 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
   /** @return */
   public static Log getLog() {
     return log;
+  }
+
+  private void publishCamFrameToMarkerFrame(Mat rvec, Mat tvec, Publisher<tf2_msgs.TFMessage> tfPublisherCamToMarker, ConnectedNode connectedNode) {
+    QuaternionHelper q = new QuaternionHelper();
+
+				/*
+				 * http://euclideanspace.com/maths/geometry/rotations/
+				 * conversions/matrixToEuler/index.htm
+				 * http://stackoverflow.com/questions/12933284/rodrigues-into-
+				 * eulerangles-and-vice-versa
+				 *
+				 * heading = atan2(-m20,m00) attitude = asin(m10) bank =
+				 * atan2(-m12,m11)
+				 */
+    // convert output rotation vector rvec to rotation matrix R
+    Mat R = new Mat(3, 3, CvType.CV_32FC1);
+    Calib3d.Rodrigues(rvec, R);
+    // get rotations around X,Y,Z from rotation matrix R
+    double bankX = Math.atan2(-R.get(1, 2)[0], R.get(1, 1)[0]);
+    double headingY = Math.atan2(-R.get(2, 0)[0], R.get(0, 0)[0]);
+    double attitudeZ = Math.asin(R.get(1, 0)[0]);
+    R.release();
+    // convert Euler angles to quarternion
+    q.setFromEuler(bankX, headingY, attitudeZ);
+
+    // set information to message
+    TFMessage tfmessage = tfPublisherCamToMarker.newMessage();
+    TransformStamped posestamped = connectedNode.getTopicMessageFactory()
+        .newFromType(geometry_msgs.TransformStamped._TYPE);
+    Transform transform = posestamped.getTransform();
+
+    Quaternion orientation = transform.getRotation();
+    Vector3 point = transform.getTranslation();
+    point.setX(tvec.get(0, 0)[0]);
+    point.setY(tvec.get(1, 0)[0]);
+    point.setZ(tvec.get(2, 0)[0]);
+
+    orientation.setW(q.getW());
+    orientation.setX(q.getX());
+    orientation.setY(q.getY());
+    orientation.setZ(q.getZ());
+    posestamped.getHeader().setFrameId(parameter.cameraFrameName());
+    posestamped.setChildFrameId(parameter.markerFrameName());
+    posestamped.getHeader().setStamp(connectedNode.getCurrentTime());
+    // frame_id too
+    tfmessage.getTransforms().add(posestamped);
+    tfPublisherCamToMarker.publish(tfmessage);
   }
 
   @Override
