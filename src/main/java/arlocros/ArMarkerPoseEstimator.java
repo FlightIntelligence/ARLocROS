@@ -204,11 +204,13 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
 				q.setFromEuler(bankX, headingY, attitudeZ);
 				Core.multiply(R, new Scalar(-1), R);
 				Core.gemm(R, tvec, 1, new Mat(), 0, tvec_map_cam, 0);
+				R.release();
 				final org.ros.rosjava_geometry.Quaternion rotation = new org.ros.rosjava_geometry.Quaternion(q.getX(),
 						q.getY(), q.getZ(), q.getW());
 				final double x = tvec_map_cam.get(0, 0)[0];
 				final double y = tvec_map_cam.get(1, 0)[0];
 				final double z = tvec_map_cam.get(2, 0)[0];
+				tvec_map_cam.release();
 
 				final org.ros.rosjava_geometry.Vector3 translation = new org.ros.rosjava_geometry.Vector3(x, y, z);
 				final org.ros.rosjava_geometry.Transform transform_map_cam = new org.ros.rosjava_geometry.Transform(
