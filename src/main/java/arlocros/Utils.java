@@ -45,7 +45,6 @@ public class Utils {
 
     final Mat grayImage = new Mat(srcImage.height(), srcImage.width(), CvType.CV_8UC1);
     Core.transform(srcImage, grayImage, transformMat);
-    srcImage.release();
 
     Mat thresholdedImage = new Mat(grayImage.height(), grayImage.width(), CvType.CV_8UC1);
     Imgproc.adaptiveThreshold(grayImage, thresholdedImage, 255, Imgproc.ADAPTIVE_THRESH_MEAN_C, Imgproc.THRESH_BINARY, filterBlockSize, subtractedConstant);
