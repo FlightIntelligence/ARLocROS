@@ -246,6 +246,10 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
                 current_pose = current_pose.multiply(transform_map_cam);
                 current_pose = current_pose.multiply(transform_cam_base);
 
+                if (current_pose.getTranslation().getZ() < 0.5) {
+                  return;
+                }
+
                 // check for plausibility of the pose by checking if movement
                 // exceeds max speed (defined) of the robot
                 if (parameter.badPoseReject()) {
