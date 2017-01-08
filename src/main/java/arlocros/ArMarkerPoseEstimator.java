@@ -272,6 +272,8 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
                     } else {
                       log.info(
                           "distance " + distance + " time: " + timedelta + " --> Pose rejected");
+                      log.info("current pose: " + current_pose.getTranslation().getX() + " " + current_pose.getTranslation().getY() + " " + current_pose.getTranslation().getZ());
+                      log.info("last pose: " + last_pose.getTranslation().getX() + " " + last_pose.getTranslation().getY() + " " + last_pose.getTranslation().getZ());
                     }
 
                   } else {
