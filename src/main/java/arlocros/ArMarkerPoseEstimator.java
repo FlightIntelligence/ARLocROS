@@ -133,13 +133,16 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
     final Publisher<tf2_msgs.TFMessage> tfPublisherMapToOdom = connectedNode.newPublisher("tf",
         tf2_msgs.TFMessage._TYPE);
 
+    logger.info("My instance id is " + parameter.instanceId());
     if (heartbeatMonitor != null) {
+      logger.info("Start waiting for arlocros id: " + (parameter.instanceId() - 1));
       while (true) {
         final Time currentTime = connectedNode.getCurrentTime();
         final Time lastHeartbeatTime = heartbeatMonitor.getLastTimeReceivedMessage();
         if (lastHeartbeatTime != null) {
           final Duration duration = currentTime.subtract(lastHeartbeatTime);
           if (duration.totalNsecs() > 3.0E8) {
+            logger.info("Not received any heartbeat for 300ms. Start running.");
             break;
           }
         }
