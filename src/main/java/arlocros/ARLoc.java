@@ -8,6 +8,9 @@ import org.ros.node.ConnectedNode;
 import org.ros.node.topic.Publisher;
 import std_msgs.Int32;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
 /** @author Hoang Tung Dinh */
 public class ARLoc extends AbstractNodeMain {
   @Override
@@ -16,8 +19,18 @@ public class ARLoc extends AbstractNodeMain {
   }
 
   @Override
-  public void onStart(ConnectedNode connectedNode) {
+  public void onStart(final ConnectedNode connectedNode) {
     final Parameter parameter = Parameter.createFrom(connectedNode.getParameterTree());
+
+    final Publisher<Int32> heartbeatPublisher = connectedNode.newPublisher(
+        parameter.heartbeatTopicName(), Int32._TYPE);
+
+    Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(() -> {
+      final Int32 heartbeatMessage = heartbeatPublisher.newMessage();
+      heartbeatMessage.setData(parameter.instanceId());
+      heartbeatPublisher.publish(heartbeatMessage);
+    }, 0, 100, TimeUnit.MILLISECONDS);
+
     final Publisher<PoseStamped> markerPosePubliser = connectedNode.newPublisher(
         parameter.markerPoseTopicName(), PoseStamped._TYPE);
 
