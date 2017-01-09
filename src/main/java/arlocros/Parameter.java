@@ -35,7 +35,9 @@ public abstract class Parameter {
 
   public abstract boolean invertBlackWhiteColor();
 
-  public abstract int instasnceID();
+  public abstract int instanceId();
+
+  public abstract String heartbeatTopicName();
 
   public static Parameter createFrom(ParameterTree parameterTree) {
     return builder()
@@ -52,7 +54,8 @@ public abstract class Parameter {
         .filterBlockSize(parameterTree.getInteger("/filter_block_size"))
         .subtractedConstant(parameterTree.getDouble("/subtracted_constant"))
         .invertBlackWhiteColor(parameterTree.getBoolean("/invert_black_white_color"))
-        .instasnceID(parameterTree.getInteger("/instance_id"))
+        .instanceId(parameterTree.getInteger("/instance_id"))
+        .heartbeatTopicName("/heartbeat_topic_name")
         .build();
   }
 
@@ -88,7 +91,9 @@ public abstract class Parameter {
 
     public abstract Builder invertBlackWhiteColor(boolean value);
 
-    public abstract Builder instasnceID(int value);
+    public abstract Builder instanceId(int value);
+
+    public abstract Builder heartbeatTopicName(String value);
 
     public abstract Parameter build();
   }

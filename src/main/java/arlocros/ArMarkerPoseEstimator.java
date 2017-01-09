@@ -34,6 +34,7 @@ import org.opencv.core.Mat;
 import org.opencv.core.MatOfDouble;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
+import org.ros.message.Duration;
 import org.ros.message.MessageListener;
 import org.ros.message.Time;
 import org.ros.namespace.GraphName;
@@ -72,27 +73,25 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
   private final Publisher<PoseStamped> posePublisher;
 
   private AtomicReference<PoseStamped> mostRecentPose;
+  @Nullable private final HeartbeatMonitor heartbeatMonitor;
 
-  private ArMarkerPoseEstimator(
-      final ConnectedNode connectedNode,
-      Parameter parameter,
-      Publisher<PoseStamped> posePublisher) {
+  private ArMarkerPoseEstimator(final ConnectedNode connectedNode, Parameter parameter,
+      Publisher<PoseStamped> posePublisher, @Nullable HeartbeatMonitor heartbeatMonitor) {
     mostRecentPose = new AtomicReference<>();
     this.parameter = parameter;
     this.posePublisher = posePublisher;
-    Executors.newSingleThreadExecutor()
-        .submit(
-            new Runnable() {
-              @Override
-              public void run() {
-                start(connectedNode);
-              }
-            });
+    this.heartbeatMonitor = heartbeatMonitor;
+    Executors.newSingleThreadExecutor().submit(new Runnable() {
+      @Override
+      public void run() {
+        start(connectedNode);
+      }
+    });
   }
 
-  public static ArMarkerPoseEstimator create(
-      ConnectedNode connectedNode, Parameter parameter, Publisher<PoseStamped> posePublisher) {
-    return new ArMarkerPoseEstimator(connectedNode, parameter, posePublisher);
+  public static ArMarkerPoseEstimator create(ConnectedNode connectedNode, Parameter parameter,
+      Publisher<PoseStamped> posePublisher, @Nullable HeartbeatMonitor heartbeatMonitor) {
+    return new ArMarkerPoseEstimator(connectedNode, parameter, posePublisher, heartbeatMonitor);
   }
 
   private void start(final ConnectedNode connectedNode) {
@@ -104,8 +103,8 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
     log = connectedNode.getLog();
 
     // Read Marker Config
-    markerConfig =
-        MarkerConfig.createFromConfig(parameter.markerConfigFile(), parameter.patternDirectory());
+    markerConfig = MarkerConfig.createFromConfig(parameter.markerConfigFile(),
+        parameter.patternDirectory());
 
     camp = getCameraInfo(connectedNode, parameter);
 
@@ -114,250 +113,239 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
     final TransformationService transformationService = TransformationService.create(connectedNode);
 
     // Subscribe to Image
-    Subscriber<sensor_msgs.Image> subscriberToImage =
-        connectedNode.newSubscriber(parameter.cameraImageTopic(), sensor_msgs.Image._TYPE);
+    Subscriber<sensor_msgs.Image> subscriberToImage = connectedNode.newSubscriber(
+        parameter.cameraImageTopic(), sensor_msgs.Image._TYPE);
 
     ComputePose computePose = null;
     try {
       final Mat cameraMatrix = CameraParams.getCameraMatrix(camp);
       final MatOfDouble distCoeffs = CameraParams.getDistCoeffs(camp);
-      computePose =
-          ComputePose.create(
-              markerConfig,
-              new Size(camp.width(), camp.height()),
-              cameraMatrix,
-              distCoeffs,
-              this.parameter.visualization());
+      computePose = ComputePose.create(markerConfig, new Size(camp.width(), camp.height()),
+          cameraMatrix, distCoeffs, this.parameter.visualization());
     } catch (NyARException e) {
       logger.info("Cannot initialize ComputePose", e);
     } catch (FileNotFoundException e) {
       logger.info("Cannot find file when initialize ComputePose", e);
     }
     final ComputePose poseProcessor = computePose;
-    final Publisher<tf2_msgs.TFMessage> tfPublisherCamToMarker =
-        connectedNode.newPublisher("tf", tf2_msgs.TFMessage._TYPE);
-    final Publisher<tf2_msgs.TFMessage> tfPublisherMapToOdom =
-        connectedNode.newPublisher("tf", tf2_msgs.TFMessage._TYPE);
-    subscriberToImage.addMessageListener(
-        new MessageListener<sensor_msgs.Image>() {
+    final Publisher<tf2_msgs.TFMessage> tfPublisherCamToMarker = connectedNode.newPublisher("tf",
+        tf2_msgs.TFMessage._TYPE);
+    final Publisher<tf2_msgs.TFMessage> tfPublisherMapToOdom = connectedNode.newPublisher("tf",
+        tf2_msgs.TFMessage._TYPE);
 
-          @Override
-          public void onNewMessage(sensor_msgs.Image message) {
+    if (heartbeatMonitor != null) {
+      while (true) {
+        final Time currentTime = connectedNode.getCurrentTime();
+        final Time lastHeartbeatTime = heartbeatMonitor.getLastTimeReceivedMessage();
+        if (lastHeartbeatTime != null) {
+          final Duration duration = currentTime.subtract(lastHeartbeatTime);
+          if (duration.totalNsecs() > 3.0E8) {
+            break;
+          }
+        }
+      }
+    }
+
+    subscriberToImage.addMessageListener(new MessageListener<sensor_msgs.Image>() {
+
+      @Override
+      public void onNewMessage(sensor_msgs.Image message) {
+        //
+        if (!message.getEncoding().toLowerCase().equals("rgb8")) {
+          log.error(
+              "Sorry, " + message.getEncoding() + " Image encoding is not supported! EXITING");
+          System.exit(-1);
+        }
+        if (camp != null) {
+          try {
             //
-            if (!message.getEncoding().toLowerCase().equals("rgb8")) {
-              log.error(
-                  "Sorry, " + message.getEncoding() + " Image encoding is not supported! EXITING");
-              System.exit(-1);
+            final Mat image = Utils.matFromImage(message);
+            // uncomment to add more contrast to the image
+            final Mat thresholdedImage = Utils.tresholdContrastBlackWhite(image,
+                parameter.filterBlockSize(), parameter.subtractedConstant(),
+                parameter.invertBlackWhiteColor());
+            image.release();
+            // Mat cannyimg = new Mat(image.height(), image.width(),
+            // CvType.CV_8UC3);
+            // Imgproc.Canny(image, cannyimg, 10, 100);
+            // Imshow.show(cannyimg);
+
+            // image.convertTo(image, -1, 1.5, 0);
+            // setup camera matrix and return vectors
+            // compute pose
+            final Mat rvec = new Mat(3, 1, CvType.CV_64F);
+            final MatOfDouble tvec = new MatOfDouble(1.0, 1.0, 1.0);
+            final boolean hasPose = poseProcessor.computePose(rvec, tvec, thresholdedImage);
+
+            if (!hasPose) {
+              return;
             }
-            if (camp != null) {
+
+            thresholdedImage.release();
+
+            // publish pose
+            final QuaternionHelper q = new QuaternionHelper();
+
+            // convert rotation vector result of solvepnp to rotation matrix
+            Mat R = new Mat(3, 3, CvType.CV_32FC1);
+            Calib3d.Rodrigues(rvec, R);
+            // see publishers before for documentation
+            final Mat tvec_map_cam = new MatOfDouble(1.0, 1.0, 1.0);
+            R = R.t();
+            final double bankX = Math.atan2(-R.get(1, 2)[0], R.get(1, 1)[0]);
+            final double headingY = Math.atan2(-R.get(2, 0)[0], R.get(0, 0)[0]);
+            final double attitudeZ = Math.asin(R.get(1, 0)[0]);
+            q.setFromEuler(bankX, headingY, attitudeZ);
+            Core.multiply(R, new Scalar(-1), R);
+            Core.gemm(R, tvec, 1, new Mat(), 0, tvec_map_cam, 0);
+            R.release();
+            final org.ros.rosjava_geometry.Quaternion rotation = new org.ros.rosjava_geometry
+                .Quaternion(
+                q.getX(), q.getY(), q.getZ(), q.getW());
+            final double x = tvec_map_cam.get(0, 0)[0];
+            final double y = tvec_map_cam.get(1, 0)[0];
+            final double z = tvec_map_cam.get(2, 0)[0];
+            tvec_map_cam.release();
+
+            final org.ros.rosjava_geometry.Vector3 translation = new org.ros.rosjava_geometry
+                .Vector3(
+                x, y, z);
+            final org.ros.rosjava_geometry.Transform transform_map_cam = new org.ros
+                .rosjava_geometry.Transform(
+                translation, rotation);
+
+            // odom to camera_rgb_optical_frame
+            final GraphName sourceFrame = GraphName.of(parameter.cameraFrameName());
+            final GraphName targetFrame = GraphName.of("base_link");
+            org.ros.rosjava_geometry.Transform transform_cam_base = null;
+
+            if (transformationService.canTransform(targetFrame, sourceFrame)) {
               try {
-                //
-                final Mat image = Utils.matFromImage(message);
-                // uncomment to add more contrast to the image
-                final Mat thresholdedImage =
-                    Utils.tresholdContrastBlackWhite(
-                        image,
-                        parameter.filterBlockSize(),
-                        parameter.subtractedConstant(),
-                        parameter.invertBlackWhiteColor());
-                image.release();
-                // Mat cannyimg = new Mat(image.height(), image.width(),
-                // CvType.CV_8UC3);
-                // Imgproc.Canny(image, cannyimg, 10, 100);
-                // Imshow.show(cannyimg);
+                transform_cam_base = transformationService.lookupTransform(targetFrame,
+                    sourceFrame);
+              } catch (Exception e) {
+                log.error(ExceptionUtils.getStackTrace(e));
+                log.info(
+                    "Cloud not get transformation from " + parameter.cameraFrameName() + " to " +
+                        "base_link! " + "However, will continue..");
+                // cancel this loop..no result can be computed
+                return;
+              }
+            } else {
+              log.info(
+                  "Cloud not get transformation from " + parameter.cameraFrameName() + " to " +
+                      "base_link!" + " However, " + "will continue..");
+              // cancel this loop..no result can be computed
+              return;
+            }
 
-                // image.convertTo(image, -1, 1.5, 0);
-                // setup camera matrix and return vectors
-                // compute pose
-                final Mat rvec = new Mat(3, 1, CvType.CV_64F);
-                final MatOfDouble tvec = new MatOfDouble(1.0, 1.0, 1.0);
-                final boolean hasPose = poseProcessor.computePose(rvec, tvec, thresholdedImage);
+            // multiply results
+            org.ros.rosjava_geometry.Transform current_pose = org.ros.rosjava_geometry.Transform
+                .identity();
+            current_pose = current_pose.multiply(transform_map_cam);
+            current_pose = current_pose.multiply(transform_cam_base);
 
-                if (!hasPose) {
-                  return;
-                }
+            if (current_pose.getTranslation().getZ() < 0.5) {
+              return;
+            }
 
-                thresholdedImage.release();
-
-                // publish pose
-                final QuaternionHelper q = new QuaternionHelper();
-
-                // convert rotation vector result of solvepnp to rotation matrix
-                Mat R = new Mat(3, 3, CvType.CV_32FC1);
-                Calib3d.Rodrigues(rvec, R);
-                // see publishers before for documentation
-                final Mat tvec_map_cam = new MatOfDouble(1.0, 1.0, 1.0);
-                R = R.t();
-                final double bankX = Math.atan2(-R.get(1, 2)[0], R.get(1, 1)[0]);
-                final double headingY = Math.atan2(-R.get(2, 0)[0], R.get(0, 0)[0]);
-                final double attitudeZ = Math.asin(R.get(1, 0)[0]);
-                q.setFromEuler(bankX, headingY, attitudeZ);
-                Core.multiply(R, new Scalar(-1), R);
-                Core.gemm(R, tvec, 1, new Mat(), 0, tvec_map_cam, 0);
-                R.release();
-                final org.ros.rosjava_geometry.Quaternion rotation =
-                    new org.ros.rosjava_geometry.Quaternion(q.getX(), q.getY(), q.getZ(), q.getW());
-                final double x = tvec_map_cam.get(0, 0)[0];
-                final double y = tvec_map_cam.get(1, 0)[0];
-                final double z = tvec_map_cam.get(2, 0)[0];
-                tvec_map_cam.release();
-
-                final org.ros.rosjava_geometry.Vector3 translation =
-                    new org.ros.rosjava_geometry.Vector3(x, y, z);
-                final org.ros.rosjava_geometry.Transform transform_map_cam =
-                    new org.ros.rosjava_geometry.Transform(translation, rotation);
-
-                // odom to camera_rgb_optical_frame
-                final GraphName sourceFrame = GraphName.of(parameter.cameraFrameName());
-                final GraphName targetFrame = GraphName.of("base_link");
-                org.ros.rosjava_geometry.Transform transform_cam_base = null;
-
-                if (transformationService.canTransform(targetFrame, sourceFrame)) {
-                  try {
-                    transform_cam_base =
-                        transformationService.lookupTransform(targetFrame, sourceFrame);
-                  } catch (Exception e) {
-                    log.error(ExceptionUtils.getStackTrace(e));
-                    log.info(
-                        "Cloud not get transformation from "
-                            + parameter.cameraFrameName()
-                            + " to "
-                            + "base_link! "
-                            + "However, will continue..");
-                    // cancel this loop..no result can be computed
-                    return;
-                  }
-                } else {
-                  log.info(
-                      "Cloud not get transformation from "
-                          + parameter.cameraFrameName()
-                          + " to "
-                          + "base_link!"
-                          + " However, "
-                          + "will continue..");
-                  // cancel this loop..no result can be computed
-                  return;
-                }
-
-                // multiply results
-                org.ros.rosjava_geometry.Transform current_pose =
-                    org.ros.rosjava_geometry.Transform.identity();
-                current_pose = current_pose.multiply(transform_map_cam);
-                current_pose = current_pose.multiply(transform_cam_base);
-
-                if (current_pose.getTranslation().getZ() < 0.5) {
-                  return;
-                }
-
-                // check for plausibility of the pose by checking if movement
-                // exceeds max speed (defined) of the robot
-                if (parameter.badPoseReject()) {
-                  Time current_timestamp = connectedNode.getCurrentTime();
-                  // TODO Unfortunately, we do not have the tf timestamp at
-                  // hand here. So we can only use the current timestamp.
-                  double maxspeed = 5;
-                  boolean goodpose = false;
-                  // if (current_pose != null && current_timestamp != null) {
-                  if ((last_pose != null && last_timestamp != null)
-                      && !Double.isNaN(last_pose.getTranslation().getX())) {
-                    // check speed of movement between last and current pose
-                    double distance = PoseCompare.distance(current_pose, last_pose);
-                    double timedelta = PoseCompare.timedelta(current_timestamp, last_timestamp);
-                    if ((distance / timedelta) < maxspeed) {
-                      if (smoothing) {
-                        double xold = last_pose.getTranslation().getX();
-                        double yold = last_pose.getTranslation().getY();
-                        double zold = last_pose.getTranslation().getZ();
-                        double xnew = current_pose.getTranslation().getX();
-                        double ynew = current_pose.getTranslation().getY();
-                        double znew = current_pose.getTranslation().getZ();
-                        final org.ros.rosjava_geometry.Vector3 smoothTranslation =
-                            new org.ros.rosjava_geometry.Vector3(
-                                (xold * 2 + xnew) / 3,
-                                (yold * 2 + ynew) / 3,
-                                (zold * 2 + znew) / 3);
-                        current_pose =
-                            new org.ros.rosjava_geometry.Transform(
-                                smoothTranslation, current_pose.getRotationAndScale());
-                        last_pose = current_pose;
-                      }
-                      last_pose = current_pose;
-                      last_timestamp = current_timestamp;
-                      goodpose = true;
-                    } else {
-                      log.info(
-                          "distance " + distance + " time: " + timedelta + " --> Pose rejected");
-                      log.info(
-                          "current pose: "
-                              + current_pose.getTranslation().getX()
-                              + " "
-                              + current_pose.getTranslation().getY()
-                              + " "
-                              + current_pose.getTranslation().getZ());
-                      log.info(
-                          "last pose: "
-                              + last_pose.getTranslation().getX()
-                              + " "
-                              + last_pose.getTranslation().getY()
-                              + " "
-                              + last_pose.getTranslation().getZ());
-                    }
-
-                  } else {
+            // check for plausibility of the pose by checking if movement
+            // exceeds max speed (defined) of the robot
+            if (parameter.badPoseReject()) {
+              Time current_timestamp = connectedNode.getCurrentTime();
+              // TODO Unfortunately, we do not have the tf timestamp at
+              // hand here. So we can only use the current timestamp.
+              double maxspeed = 5;
+              boolean goodpose = false;
+              // if (current_pose != null && current_timestamp != null) {
+              if ((last_pose != null && last_timestamp != null) && !Double.isNaN(
+                  last_pose.getTranslation().getX())) {
+                // check speed of movement between last and current pose
+                double distance = PoseCompare.distance(current_pose, last_pose);
+                double timedelta = PoseCompare.timedelta(current_timestamp, last_timestamp);
+                if ((distance / timedelta) < maxspeed) {
+                  if (smoothing) {
+                    double xold = last_pose.getTranslation().getX();
+                    double yold = last_pose.getTranslation().getY();
+                    double zold = last_pose.getTranslation().getZ();
+                    double xnew = current_pose.getTranslation().getX();
+                    double ynew = current_pose.getTranslation().getY();
+                    double znew = current_pose.getTranslation().getZ();
+                    final org.ros.rosjava_geometry.Vector3 smoothTranslation = new org.ros
+                        .rosjava_geometry.Vector3(
+                        (xold * 2 + xnew) / 3, (yold * 2 + ynew) / 3, (zold * 2 + znew) / 3);
+                    current_pose = new org.ros.rosjava_geometry.Transform(smoothTranslation,
+                        current_pose.getRotationAndScale());
                     last_pose = current_pose;
-                    last_timestamp = current_timestamp;
                   }
-                  // }
-                  // bad pose rejection
-                  if (!goodpose) {
-                    return;
-                  }
+                  last_pose = current_pose;
+                  last_timestamp = current_timestamp;
+                  goodpose = true;
+                } else {
+                  log.info("distance " + distance + " time: " + timedelta + " --> Pose rejected");
+                  log.info("current pose: " + current_pose.getTranslation()
+                      .getX() + " " + current_pose.getTranslation()
+                      .getY() + " " + current_pose.getTranslation().getZ());
+                  log.info("last pose: " + last_pose.getTranslation()
+                      .getX() + " " + last_pose.getTranslation()
+                      .getY() + " " + last_pose.getTranslation().getZ());
                 }
 
-                // set information to message
-                final geometry_msgs.PoseStamped posestamped = posePublisher.newMessage();
-                Pose pose = posestamped.getPose();
-                Quaternion orientation = pose.getOrientation();
-                Point point = pose.getPosition();
+              } else {
+                last_pose = current_pose;
+                last_timestamp = current_timestamp;
+              }
+              // }
+              // bad pose rejection
+              if (!goodpose) {
+                return;
+              }
+            }
 
-                point.setX(current_pose.getTranslation().getX());
+            // set information to message
+            final geometry_msgs.PoseStamped posestamped = posePublisher.newMessage();
+            Pose pose = posestamped.getPose();
+            Quaternion orientation = pose.getOrientation();
+            Point point = pose.getPosition();
 
-                point.setY(current_pose.getTranslation().getY());
+            point.setX(current_pose.getTranslation().getX());
 
-                point.setZ(current_pose.getTranslation().getZ());
+            point.setY(current_pose.getTranslation().getY());
 
-                orientation.setW(current_pose.getRotationAndScale().getW());
-                orientation.setX(current_pose.getRotationAndScale().getX());
-                orientation.setY(current_pose.getRotationAndScale().getY());
-                orientation.setZ(current_pose.getRotationAndScale().getZ());
+            point.setZ(current_pose.getTranslation().getZ());
 
-                // frame_id too
-                posestamped.getHeader().setFrameId("map");
-                posestamped.getHeader().setStamp(connectedNode.getCurrentTime());
-                posePublisher.publish(posestamped);
-                mostRecentPose.set(posestamped);
+            orientation.setW(current_pose.getRotationAndScale().getW());
+            orientation.setX(current_pose.getRotationAndScale().getX());
+            orientation.setY(current_pose.getRotationAndScale().getY());
+            orientation.setZ(current_pose.getRotationAndScale().getZ());
+
+            // frame_id too
+            posestamped.getHeader().setFrameId("map");
+            posestamped.getHeader().setStamp(connectedNode.getCurrentTime());
+            posePublisher.publish(posestamped);
+            mostRecentPose.set(posestamped);
 
 //                publishCamFrameToMarkerFrame(rvec, tvec, tfPublisherCamToMarker, connectedNode);
 //                publishMapToOdom(
 //                    rvec, tvec, transformationService, tfPublisherMapToOdom, connectedNode);
-                rvec.release();
-                tvec.release();
+            rvec.release();
+            tvec.release();
 
-              } catch (Exception e) {
-                logger.info("An exception occurs.", e);
-              }
-            }
+          } catch (Exception e) {
+            logger.info("An exception occurs.", e);
           }
-        });
+        }
+      }
+    });
   }
 
-  private static CameraParams getCameraInfo(
-      ConnectedNode connectedNode, Parameter parameter) { // Subscribe
+  private static CameraParams getCameraInfo(ConnectedNode connectedNode,
+      Parameter parameter) { // Subscribe
     // to
     // camera
     // info
-    Subscriber<CameraInfo> subscriberToCameraInfo =
-        connectedNode.newSubscriber(parameter.cameraInfoTopic(), CameraInfo._TYPE);
+    Subscriber<CameraInfo> subscriberToCameraInfo = connectedNode.newSubscriber(
+        parameter.cameraInfoTopic(), CameraInfo._TYPE);
     final CameraInfoService cameraInfoService = CameraInfoService.create(subscriberToCameraInfo);
     Optional<CameraParams> cameraParamsOptional = cameraInfoService.getCameraParams();
     while (!cameraParamsOptional.isPresent()) {
@@ -377,11 +365,8 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
     return log;
   }
 
-  private void publishCamFrameToMarkerFrame(
-      Mat rvec,
-      Mat tvec,
-      Publisher<tf2_msgs.TFMessage> tfPublisherCamToMarker,
-      ConnectedNode connectedNode) {
+  private void publishCamFrameToMarkerFrame(Mat rvec, Mat tvec,
+      Publisher<tf2_msgs.TFMessage> tfPublisherCamToMarker, ConnectedNode connectedNode) {
     QuaternionHelper q = new QuaternionHelper();
 
     /*
@@ -406,8 +391,8 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
 
     // set information to message
     TFMessage tfmessage = tfPublisherCamToMarker.newMessage();
-    TransformStamped posestamped =
-        connectedNode.getTopicMessageFactory().newFromType(geometry_msgs.TransformStamped._TYPE);
+    TransformStamped posestamped = connectedNode.getTopicMessageFactory()
+        .newFromType(geometry_msgs.TransformStamped._TYPE);
     Transform transform = posestamped.getTransform();
 
     Quaternion orientation = transform.getRotation();
@@ -428,12 +413,8 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
     tfPublisherCamToMarker.publish(tfmessage);
   }
 
-  private void publishMapToOdom(
-      Mat rvec,
-      Mat tvec,
-      TransformationService transformationService,
-      Publisher<tf2_msgs.TFMessage> tfPublisherMapToOdom,
-      ConnectedNode connectedNode) {
+  private void publishMapToOdom(Mat rvec, Mat tvec, TransformationService transformationService,
+      Publisher<tf2_msgs.TFMessage> tfPublisherMapToOdom, ConnectedNode connectedNode) {
     // compute transform map to odom from map to
     // camera_rgb_optical_frame and odom to camera_rgb_optical_frame
 
@@ -458,16 +439,16 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
     Core.gemm(R, tvec, 1, new Mat(), 0, tvec_map_cam, 0); // tvec_map_cam=R*tvec
     R.release();
 
-    org.ros.rosjava_geometry.Quaternion rotation =
-        new org.ros.rosjava_geometry.Quaternion(q.getX(), q.getY(), q.getZ(), q.getW());
+    org.ros.rosjava_geometry.Quaternion rotation = new org.ros.rosjava_geometry.Quaternion(q.getX(),
+        q.getY(), q.getZ(), q.getW());
     double x = tvec_map_cam.get(0, 0)[0];
     double y = tvec_map_cam.get(1, 0)[0];
     double z = tvec_map_cam.get(2, 0)[0];
     tvec_map_cam.release();
     // create a Transform Object that hold the transform map to cam
     org.ros.rosjava_geometry.Vector3 translation = new org.ros.rosjava_geometry.Vector3(x, y, z);
-    org.ros.rosjava_geometry.Transform transform_map_cam =
-        new org.ros.rosjava_geometry.Transform(translation, rotation);
+    org.ros.rosjava_geometry.Transform transform_map_cam = new org.ros.rosjava_geometry.Transform(
+        translation, rotation);
 
     // odom to camera_rgb_optical_frame
     GraphName sourceFrame = GraphName.of(parameter.cameraFrameName());
@@ -479,23 +460,14 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
       } catch (Exception e) {
         log.error(ExceptionUtils.getStackTrace(e));
         log.info(
-            "Cloud not get transformation from "
-                + parameter.cameraFrameName()
-                + " to "
-                + "odom! "
-                + ""
-                + "However, "
-                + "will continue..");
+            "Cloud not get transformation from " + parameter.cameraFrameName() + " to " + "odom! " +
+                "" + "" + "" + "" + "However, " + "will continue..");
         return;
       }
     } else {
       log.info(
-          "Cloud not get transformation from "
-              + parameter.cameraFrameName()
-              + " to "
-              + "odom! "
-              + "However, will "
-              + "continue..");
+          "Cloud not get transformation from " + parameter.cameraFrameName() + " to " + "odom! "
+              + "However, will " + "continue..");
       // cancel this loop..no result can be computed
       return;
     }
@@ -506,8 +478,8 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
 
     // set information to ROS message
     TFMessage tfMessage = tfPublisherMapToOdom.newMessage();
-    TransformStamped transformStamped =
-        connectedNode.getTopicMessageFactory().newFromType(geometry_msgs.TransformStamped._TYPE);
+    TransformStamped transformStamped = connectedNode.getTopicMessageFactory()
+        .newFromType(geometry_msgs.TransformStamped._TYPE);
     Transform transform = transformStamped.getTransform();
 
     Quaternion orientation = transform.getRotation();

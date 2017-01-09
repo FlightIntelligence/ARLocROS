@@ -6,6 +6,7 @@ import org.ros.namespace.GraphName;
 import org.ros.node.AbstractNodeMain;
 import org.ros.node.ConnectedNode;
 import org.ros.node.topic.Publisher;
+import std_msgs.Int32;
 
 /** @author Hoang Tung Dinh */
 public class ARLoc extends AbstractNodeMain {
@@ -17,24 +18,38 @@ public class ARLoc extends AbstractNodeMain {
   @Override
   public void onStart(ConnectedNode connectedNode) {
     final Parameter parameter = Parameter.createFrom(connectedNode.getParameterTree());
-    final Publisher<PoseStamped> markerPosePubliser =
-        connectedNode.newPublisher(parameter.markerPoseTopicName(), PoseStamped._TYPE);
+    final Publisher<PoseStamped> markerPosePubliser = connectedNode.newPublisher(
+        parameter.markerPoseTopicName(), PoseStamped._TYPE);
 
-    final PoseEstimator poseEstimator =
-        ArMarkerPoseEstimator.create(connectedNode, parameter, markerPosePubliser);
+    // add heartbeat publisher here
+
+    HeartbeatMonitor heartbeatMonitor = null;
+    if (parameter.instanceId() > 0) {
+      // add message listener here
+      heartbeatMonitor = HeartbeatMonitor.create(connectedNode, parameter.instanceId() - 1);
+    }
+
+    final MessagesSubscriberService<Int32> heartbeatMessageSubscriber = MessagesSubscriberService
+        .create(
+        connectedNode.<Int32>newSubscriber(parameter.heartbeatTopicName(), Int32._TYPE));
+
+    if (heartbeatMonitor != null) {
+      heartbeatMessageSubscriber.registerMessageObserver(heartbeatMonitor);
+    }
+
+    final PoseEstimator poseEstimator = ArMarkerPoseEstimator.create(connectedNode, parameter,
+        markerPosePubliser, heartbeatMonitor);
 
     final BebopOdomVelocityEstimator velocityEstimator = BebopOdomVelocityEstimator.create();
 
-    final MessagesSubscriberService<Odometry> odomSubscriber =
-        MessagesSubscriberService.create(
-            connectedNode.<Odometry>newSubscriber("/bebop/odom", Odometry._TYPE));
+    final MessagesSubscriberService<Odometry> odomSubscriber = MessagesSubscriberService.create(
+        connectedNode.<Odometry>newSubscriber("/bebop/odom", Odometry._TYPE));
     odomSubscriber.registerMessageObserver(velocityEstimator);
 
-    final Publisher<PoseStamped> fusedPosePublisher =
-        connectedNode.newPublisher(parameter.fusedPoseTopicName(), PoseStamped._TYPE);
+    final Publisher<PoseStamped> fusedPosePublisher = connectedNode.newPublisher(
+        parameter.fusedPoseTopicName(), PoseStamped._TYPE);
 
-    final FusedLocalization fusedLocalization =
-        FusedLocalization.create(
-            poseEstimator, velocityEstimator, fusedPosePublisher, 40, connectedNode);
+    final FusedLocalization fusedLocalization = FusedLocalization.create(poseEstimator,
+        velocityEstimator, fusedPosePublisher, 40, connectedNode);
   }
 }
