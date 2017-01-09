@@ -1,6 +1,7 @@
 package arlocros;
 
 import com.google.auto.value.AutoValue;
+import org.ros.node.ConnectedNode;
 import org.ros.node.parameter.ParameterTree;
 
 /** @author Hoang Tung Dinh */
@@ -39,9 +40,10 @@ public abstract class Parameter {
 
   public abstract String heartbeatTopicName();
 
-  public static Parameter createFrom(ParameterTree parameterTree) {
-    return builder()
-        .patternDirectory(parameterTree.getString("/pattern_dir"))
+  public static Parameter createFrom(ConnectedNode connectedNode) {
+    final ParameterTree parameterTree = connectedNode.getParameterTree();
+    final String nodeName = connectedNode.getName().toString();
+    return builder().patternDirectory(parameterTree.getString("/pattern_dir"))
         .markerConfigFile(parameterTree.getString("/marker_config_file"))
         .markerFrameName(parameterTree.getString("/marker_frame_name"))
         .cameraFrameName(parameterTree.getString("/camera_frame_name"))
@@ -54,8 +56,8 @@ public abstract class Parameter {
         .filterBlockSize(parameterTree.getInteger("/filter_block_size"))
         .subtractedConstant(parameterTree.getDouble("/subtracted_constant"))
         .invertBlackWhiteColor(parameterTree.getBoolean("/invert_black_white_color"))
-        .instanceId(parameterTree.getInteger("/instance_id"))
-        .heartbeatTopicName("/heartbeat_topic_name")
+        .instanceId(parameterTree.getInteger("/" + nodeName + "/instance_id"))
+        .heartbeatTopicName(parameterTree.getString("/heartbeat_topic_name"))
         .build();
   }
 

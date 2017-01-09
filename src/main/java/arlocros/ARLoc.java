@@ -20,7 +20,7 @@ public class ARLoc extends AbstractNodeMain {
 
   @Override
   public void onStart(final ConnectedNode connectedNode) {
-    final Parameter parameter = Parameter.createFrom(connectedNode.getParameterTree());
+    final Parameter parameter = Parameter.createFrom(connectedNode);
 
     final Publisher<Int32> heartbeatPublisher = connectedNode.newPublisher(
         parameter.heartbeatTopicName(), Int32._TYPE);
