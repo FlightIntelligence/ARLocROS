@@ -35,6 +35,8 @@ public abstract class Parameter {
 
   public abstract boolean invertBlackWhiteColor();
 
+  public abstract int instasnceID();
+
   public static Parameter createFrom(ParameterTree parameterTree) {
     return builder()
         .patternDirectory(parameterTree.getString("/pattern_dir"))
@@ -50,6 +52,7 @@ public abstract class Parameter {
         .filterBlockSize(parameterTree.getInteger("/filter_block_size"))
         .subtractedConstant(parameterTree.getDouble("/subtracted_constant"))
         .invertBlackWhiteColor(parameterTree.getBoolean("/invert_black_white_color"))
+        .instasnceID(parameterTree.getInteger("/instance_id"))
         .build();
   }
 
@@ -84,6 +87,8 @@ public abstract class Parameter {
     public abstract Builder subtractedConstant(double value);
 
     public abstract Builder invertBlackWhiteColor(boolean value);
+
+    public abstract Builder instasnceID(int value);
 
     public abstract Parameter build();
   }
