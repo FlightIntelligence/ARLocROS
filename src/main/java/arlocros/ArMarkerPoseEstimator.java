@@ -84,7 +84,11 @@ public final class ArMarkerPoseEstimator implements PoseEstimator {
     Executors.newSingleThreadExecutor().submit(new Runnable() {
       @Override
       public void run() {
-        start(connectedNode);
+        try {
+          start(connectedNode);
+        } catch (Throwable e) {
+          logger.error("Exception occurs.", e);
+        }
       }
     });
   }
