@@ -24,10 +24,14 @@ mainClassName = 'org.ros.RosRun'
 // delete starting scripts generated in build/scripts. It is for avoiding the non-unique
 // executable issue when using roslaunch.
 // This will not delete a build/scripts if the file is already there
-installApp {
-    doLast {
-        delete('build/scripts')
-    }
+task deleteBuildScriptsDir(type: Delete) {
+    delete 'build/scripts'
+}
+
+task rosBuild {
+    dependsOn 'installDist'
+    dependsOn 'deleteBuildScriptsDir'
+    deleteBuildScriptsDir.mustRunAfter installDist
 }
 
 /* 
@@ -35,6 +39,7 @@ installApp {
  here) or on sibling subprojects. Fpr external maven artifact dependencies
  it's convenient to use an open ranged dependency, but restrict it to
  cover the patch version only to avoid breakages due to api changes
+ 
  which usually occur on minor and major version numbers.
 */
 
