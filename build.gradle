@@ -73,12 +73,13 @@ repositories {
 
 dependencies {
     /* An external maven artifact dependency */
-    compile 'org.ros.rosjava_core:rosjava:[0.2,0.3)'
-    compile 'org.ros.rosjava_core:rosjava_geometry:[0.2,0.3)'
-    compile 'org.ros.rosjava_messages:geometry_msgs:[1.11,1.12)'
-    compile 'org.ros.rosjava_messages:visualization_msgs:[1.11,1.12)'
+    compile 'org.ros.rosjava_core:rosjava:[0.3,0.4)'
+    compile 'org.ros.rosjava_core:rosjava_geometry:[0.3,0.4)'
+
+    compile 'org.ros.rosjava_messages:geometry_msgs:[1.12,1.13)'
+    compile 'org.ros.rosjava_messages:visualization_msgs:1.12.5'
     compile 'org.ros.rosjava_messages:sensor_msgs:[1.11,1.12)'
-    compile 'org.ros.rosjava_messages:std_msgs:0.5.10'
+    //compile 'org.ros.rosjava_messages:std_msgs:0.5.10'
     compile 'org.opencv:opencv:2.4.8'
     //compile files('/usr/share/OpenCV/java/opencv-248.jar')
     /* Example of a local subproject dependency */
